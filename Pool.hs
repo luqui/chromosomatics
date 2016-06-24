@@ -3,20 +3,14 @@
 module Pool where
 
 import qualified Data.Sequence as Seq
-import qualified Control.DeepSeq as DeepSeq
-import Data.Foldable (toList)
 import Control.Arrow
 import Data.Ord (comparing, Down(..))
-import Control.Applicative 
 import Data.Monoid ((<>))
 
 import DNA
 
 newtype Pool s f = Pool { getPool :: Seq.Seq (DNA s f) }
     deriving (Monoid)
-
-instance (DeepSeq.NFData s, NFData1 f) => DeepSeq.NFData (Pool s f) where
-    rnf (Pool p) = DeepSeq.rnf (toList p)
 
 data SimConfig s f = SimConfig {
     codeSize :: Int,

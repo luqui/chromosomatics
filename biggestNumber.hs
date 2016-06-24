@@ -5,11 +5,8 @@ import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import Control.Monad (join)
 import Control.Arrow
-import Control.Applicative
 import Data.Ord (comparing)
-import Data.List (sortBy, maximumBy)
-import Data.Monoid ((<>))
-import Control.DeepSeq (rnf)
+import Data.List (maximumBy)
 
 import DNA
 import Pool
@@ -20,13 +17,7 @@ data NumberF a
     | Plus a a
     deriving (Functor, Show)
 
-instance NFData1 NumberF where
-    rnf1 Zero = ()
-    rnf1 One = ()
-    rnf1 (Plus x y) = rnf x `seq` rnf y
-
 type Symbol = Char
-symbolSpace = 26
 
 simConfig :: SimConfig Symbol NumberF
 simConfig = SimConfig {
@@ -81,10 +72,8 @@ report pool = do
     putStrLn $ "best: " ++ show (fst best)
     putStrLn . unlines $ showDNALines (snd best)
 
-
 mainIter :: Pool Symbol NumberF -> IO a
 mainIter pool = do
-    rnf pool `seq` return ()
     report pool
     mainIter =<< Rand.evalRandIO (iterPool simConfig iterConfig pool)
 

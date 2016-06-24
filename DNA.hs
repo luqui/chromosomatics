@@ -1,5 +1,7 @@
 {-# LANGUAGE RankNTypes, LambdaCase, TypeSynonymInstances, FlexibleInstances #-}
 
+module DNA where
+
 import qualified Data.Map as Map
 import qualified Control.Monad.Random as Rand
 import Control.Applicative
@@ -42,3 +44,4 @@ combineDNA (DNA table1 s1) (DNA table2 s2) = do
                 pure table1,
                 pure table2])
         <*> pick s1 s2
+

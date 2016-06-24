@@ -12,6 +12,7 @@ type ZAlgebra f a = Maybe (f a) -> a
 -- `DNA s f` is a symbol table over the algebra `f`, with a distinguished start symbol.
 type Table s f = Map.Map s (f s)
 data DNA s f = DNA (Table s f) s
+    deriving (Show)
 
 fromTable :: (Functor f, Ord s) => ZAlgebra f a -> Table s f -> s -> a
 fromTable alg table s = alg ((fmap.fmap) (fromTable alg table) (Map.lookup s table))
@@ -20,11 +21,14 @@ birth :: (Functor f, Ord s) => ZAlgebra f a -> DNA s f -> a
 birth alg (DNA table s0) = fromTable alg table s0
 
 
-class (Applicative d) => Distribution d where
-    pick :: a -> a -> d a
+class (Monad d) => Distribution d where
+    uniform :: [a] -> d a
+
+pick :: (Distribution d) => a -> a -> d a
+pick x y = uniform [x,y]
 
 instance (Rand.RandomGen g) => Distribution (Rand.Rand g) where
-    pick x y = fmap (\case False -> x; True -> y) Rand.getRandom
+    uniform = Rand.uniform
 
 -- `Dist a` is a probability distribution of `a`s.
 type Dist = Rand.Rand Rand.StdGen

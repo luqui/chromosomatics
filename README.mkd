@@ -19,6 +19,10 @@ This corresponds to the program
 
 just by unfolding the references.
 
+When combining different organisms, we just union their label set, choosing
+the values randomly.  So when combining organisms X and Y, we might take X's
+`'A'` label, X's `'B'`, and Y's `'C'` and `'D'`.
+
 My hypothesis is that this scheme will work well in an evolutionary setting
 because the set of labels will begin to stabilize -- most programs in the sample
 will have mostly the same values of each label, so labels can start to represent

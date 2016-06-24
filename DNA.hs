@@ -5,7 +5,11 @@ module DNA where
 import qualified Data.Map as Map
 import qualified Control.Monad.Random as Rand
 import qualified Data.Sequence as Seq
+import qualified Control.DeepSeq as DeepSeq
 import Control.Applicative
+
+class NFData1 f where
+    rnf1 :: (DeepSeq.NFData a) => f a -> ()
 
 -- A `ZAlgebra` is an algebra with a 'zero' element (`alg Nothing`).
 type ZAlgebra f a = Maybe (f a) -> a
@@ -14,6 +18,10 @@ type ZAlgebra f a = Maybe (f a) -> a
 type Table s f = Map.Map s (f s)
 data DNA s f = DNA (Table s f) s
     deriving (Show)
+
+instance (DeepSeq.NFData s, NFData1 f) => DeepSeq.NFData (DNA s f) where
+    rnf (DNA table s0) = DeepSeq.rnf s0 `seq` DeepSeq.rnf (map rnf1 (Map.elems table))
+
 
 fromTable :: (Functor f, Ord s) => ZAlgebra f a -> Table s f -> s -> a
 fromTable alg table s = alg ((fmap.fmap) (fromTable alg table) (Map.lookup s table))

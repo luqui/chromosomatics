@@ -5,8 +5,9 @@ import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import Control.Monad (join)
 import Control.Arrow
-import Data.Ord (comparing)
-import Data.List (maximumBy)
+import Data.Ord (comparing, Down(..))
+import Data.List (maximumBy, sortBy)
+import Data.Foldable (toList)
 
 import DNA
 import Pool
@@ -15,7 +16,7 @@ data NumberF a
     = Zero
     | One
     | Plus a a
-    deriving (Functor, Show)
+    deriving (Eq, Ord, Functor, Show)
 
 type Symbol = Char
 
@@ -70,7 +71,16 @@ report pool = do
         show (fromIntegral (sum (fmap fst inst)) / fromIntegral (Seq.length inst))
     let best = maximumBy (comparing fst) inst
     putStrLn $ "best: " ++ show (fst best)
-    putStrLn . unlines $ showDNALines (snd best)
+    putStrLn . unlines $ showTableLines (histogram pool)
+    --putStrLn . unlines $ showDNALines (snd best)
+
+histogram :: (Ord s, Ord (f s)) => Pool s f -> Map.Map s [Int]
+histogram (Pool dnas) = ($ map getTable (toList dnas)) $ 
+    (fmap.fmap) (\v -> Map.singleton v 1) >>>
+    Map.unionsWith (Map.unionWith (+)) >>>
+    fmap (sortBy (comparing Down) . Map.elems)
+    where
+    getTable (DNA table _) = table
 
 mainIter :: Pool Symbol NumberF -> IO a
 mainIter pool = do

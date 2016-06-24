@@ -26,10 +26,7 @@ symbolDist = uniform ['A'..'Z']
 maxDepth = 10
 
 integerDepthAlg :: ZAlgebra NumberF (Int -> Integer)
-integerDepthAlg = maybe (const 0) (\case
-    Zero -> const 0
-    One -> const 1
-    Plus xf yf -> \d -> if d > maxDepth then 0 else xf (d+1) + yf (d+1))
+integerDepthAlg = depthAlg maxDepth integerAlg
 
 integerAlg :: ZAlgebra NumberF Integer
 integerAlg = maybe 0 (\case

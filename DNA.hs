@@ -21,6 +21,11 @@ fromTable alg table s = alg ((fmap.fmap) (fromTable alg table) (Map.lookup s tab
 birth :: (Functor f, Ord s) => ZAlgebra f a -> DNA s f -> a
 birth alg (DNA table s0) = fromTable alg table s0
 
+depthAlg :: (Functor f) => Int -> ZAlgebra f a -> ZAlgebra f (Int -> a)
+depthAlg maxDepth alg f depth
+    | depth >= maxDepth = alg Nothing
+    | otherwise = alg ((fmap.fmap) ($ depth + 1) f)
+
 
 class (Monad d) => Distribution d where
     uniform :: [a] -> d a

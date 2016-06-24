@@ -3,11 +3,13 @@
 import DNA
 import qualified Control.Monad.Random as Rand
 import qualified Data.Map as Map
+import qualified Data.Sequence as Seq
 import Control.Monad (join)
 import Control.Arrow
 import Control.Applicative
 import Data.Ord (comparing)
 import Data.List (sortBy, maximumBy)
+import Data.Monoid ((<>))
 
 data NumberF a
     = Zero
@@ -42,25 +44,22 @@ numberFDist aDist = join (uniform [
         Plus <$> aDist <*> aDist
     ])
 
-type Pool = [DNA Symbol NumberF]
+type Pool = Seq.Seq (DNA Symbol NumberF)
 
 initialPool :: (Distribution d) => Int -> d Pool
-initialPool size = replicateA size (newDNA symbolSpace symbolDist numberFDist)
-
-hookup :: (Distribution d) => Pool -> d (DNA Symbol NumberF)
-hookup dnas = join (combineDNA <$> uniform dnas <*> uniform dnas)
+initialPool size = Seq.replicateA size (newDNA symbolSpace symbolDist numberFDist)
 
 prunePool :: Int -> Pool -> Pool
 prunePool killSize =
-    map (flip (birth integerDepthAlg) 0 &&& id) >>>
-    sortBy (comparing fst) >>> 
-    map snd >>>
-    drop killSize
+    fmap (flip (birth integerDepthAlg) 0 &&& id) >>>
+    Seq.unstableSortBy (comparing fst) >>> 
+    fmap snd >>>
+    Seq.drop killSize
 
 iter :: (Distribution d) => Int -> Int -> Int -> Pool -> d Pool
 iter poolSize bufferSize newLifeSize pool = do
     pool' <- initialPool newLifeSize
-    pool'' <- replicateA (poolSize+bufferSize) (hookup (pool' ++ pool))
+    pool'' <- Seq.replicateA (poolSize+bufferSize) (hookup (pool' <> pool))
     return (prunePool bufferSize pool'')
 
 showDNALines :: DNA Symbol NumberF -> [String]
@@ -74,10 +73,11 @@ showTableLines m = [ show k ++ ": \t" ++ show v | (k,v) <- Map.assocs m ]
 
 report :: Pool -> IO ()
 report pool = do
-    let inst = map (flip (birth integerDepthAlg) 0 &&& id) pool
+    let inst = fmap (flip (birth integerDepthAlg) 0 &&& id) pool
     putStrLn "------------"
-    putStrLn $ "pool size: " ++ show (length inst)
-    putStrLn $ "average: " ++ show (fromIntegral (sum (map fst inst)) / fromIntegral (length inst))
+    putStrLn $ "pool size: " ++ show (Seq.length inst)
+    putStrLn $ "average: " ++ 
+        show (fromIntegral (sum (fmap fst inst)) / fromIntegral (Seq.length inst))
     let best = maximumBy (comparing fst) inst
     putStrLn $ "best: " ++ show (fst best)
     putStrLn . unlines $ showDNALines (snd best)

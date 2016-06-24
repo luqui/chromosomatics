@@ -4,6 +4,7 @@ module DNA where
 
 import qualified Data.Map as Map
 import qualified Control.Monad.Random as Rand
+import qualified Data.Sequence as Seq
 import Control.Applicative
 
 -- A `ZAlgebra` is an algebra with a 'zero' element (`alg Nothing`).
@@ -23,12 +24,14 @@ birth alg (DNA table s0) = fromTable alg table s0
 
 class (Monad d) => Distribution d where
     uniform :: [a] -> d a
+    intRange :: Int -> d Int
 
 pick :: (Distribution d) => a -> a -> d a
 pick x y = uniform [x,y]
 
 instance (Rand.RandomGen g) => Distribution (Rand.Rand g) where
     uniform = Rand.uniform
+    intRange n = Rand.getRandomR (0, n-1)
 
 -- `Dist a` is a probability distribution of `a`s.
 type Dist = Rand.Rand Rand.StdGen
@@ -49,3 +52,11 @@ combineDNA (DNA table1 s1) (DNA table2 s2) = do
                 pure table2])
         <*> pick s1 s2
 
+hookup :: (Ord s, Distribution d) => Seq.Seq (DNA s f) -> d (DNA s f)
+hookup dnas 
+    | Seq.null dnas = error "hookup: empty sequence"
+    | otherwise = do
+        i <- intRange (Seq.length dnas)
+        j <- intRange (Seq.length dnas)
+        combineDNA (Seq.index dnas i) (Seq.index dnas j)
+    

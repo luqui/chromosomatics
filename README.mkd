@@ -1,0 +1,32 @@
+This evolutionary programming framework is based on a simple but powerful scheme
+for representing programs in a way that combines well.
+
+Each program is a set of global labels with a start label.  In the example,
+biggestNumber, these labels are capital letters, but they could be any
+identifier.  Each label corresponds to a subexpression of the program being
+generated, in terms of other labels.  So for example, in the `biggestNumber.hs`
+example program:
+
+    START 'A'
+    'A': Plus 'B' 'C'
+    'B': Plus 'C' 'D'
+    'C': One
+    'D': Zero
+
+This corresponds to the program 
+
+    Plus (Plus One Zero) One
+
+just by unfolding the references.
+
+My hypothesis is that this scheme will work well in an evolutionary setting
+because the set of labels will begin to stabilize -- most programs in the sample
+will have mostly the same values of each label, so labels can start to represent
+more complex structures -- behaving more like chromosomes.  A single mutation
+from a label 'A' to 'B', whether as the start symbol or from within another
+label, can switch between quite different structures, both of which have evolved
+to be viable.
+
+And indeed in `biggestNumber.hs`, although it is a simple domain, it works quite
+well, finding the optimal solution in a matter of minutes -- there is only one
+optimal program after label unfolding.

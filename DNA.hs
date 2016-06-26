@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, LambdaCase, TypeSynonymInstances, FlexibleInstances, ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes, LambdaCase, TypeSynonymInstances, FlexibleInstances, ScopedTypeVariables, BangPatterns #-}
 
 module DNA (
     FDist,
@@ -63,9 +63,9 @@ combine (DNA table1 s1) (DNA table2 s2) = DNA <$> table' <*> pick s1 s2
     table' = V.generateM (max (V.length table1) (V.length table2)) $ \i -> 
                 pickJust (table1 V.!? i) (table2 V.!? i)
 
-    pickJust (Just x) (Just y) = pick x y
-    pickJust (Just x) Nothing = pure x
-    pickJust Nothing (Just y) = pure y
+    pickJust (Just !x) (Just !y) = pick x y
+    pickJust (Just !x) Nothing = pure x
+    pickJust Nothing (Just !y) = pure y
     pickJust Nothing Nothing = error "pickJust: nothing to pick"
 
 mutate :: (Distribution d, Functor f)

@@ -32,6 +32,7 @@ depthAlg maxDepth zero alg f depth
 
 -- `DNA f` is a symbol table over the algebra `f`, with a distinguished start symbol.
 newtype Symbol = Symbol { getSymbol :: Int }
+    deriving (Eq, Ord)
 
 instance Show Symbol where
     show (Symbol n) = '@' : show n
@@ -68,13 +69,26 @@ combine (DNA table1 s1) (DNA table2 s2) = DNA <$> table' <*> pick s1 s2
     pickJust Nothing (Just !y) = pure y
     pickJust Nothing Nothing = error "pickJust: nothing to pick"
 
-mutate :: (Distribution d, Functor f)
-       => Double -> Double -> (f Symbol -> d (f Symbol)) -> DNA f -> d (DNA f)
-mutate startP symP mutateCode dna@(DNA table s0) = 
-    DNA <$> V.mapM mutateElem table
-        <*> modifyP startP (const (newSymbol dna)) s0
+mutate :: (Distribution d, Monad f)
+       => Double -> Double -> Double -> (f Symbol -> d (f Symbol)) -> DNA f -> d (DNA f)
+mutate startP symP compressP mutateCode dna@(DNA table s0) = 
+    modifyP compressP compressMut =<<
+        (DNA <$> V.mapM mutateElem table
+             <*> modifyP startP (const (newSymbol dna)) s0)
     where
     mutateElem e = mutateCode =<< modifyP symP (\x -> (<$ x) <$> newSymbol dna) e
+    compressMut dna = do
+        sym <- newSymbol dna
+        return (compress sym dna)
+
+-- Compress is a mutation that frees up space in the symbol table by inlining the references
+-- to a certain variable.
+compress :: (Monad f) => Symbol -> DNA f -> DNA f
+compress sym (DNA table s0) = DNA (V.map (inline =<<) table) s0
+    where
+    inline s | s == sym = value
+             | otherwise = return s
+    value = table V.! getSymbol sym
 
 showDNALines :: (Show (f Symbol)) => DNA f -> [String]
 showDNALines (DNA table s0) = 

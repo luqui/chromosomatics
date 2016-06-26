@@ -44,10 +44,10 @@ rank (Metric metric) =
     fmap snd
 
 -- odds = 1 / mutationRate
-mutatePool :: (Distribution d, Functor f) => SimConfig f -> Int -> Pool f -> d (Pool f)
+mutatePool :: (Distribution d, Monad f) => SimConfig f -> Int -> Pool f -> d (Pool f)
 mutatePool conf odds pool =
     Pool <$> traverse (\dna -> 
-                DNA.mutate mutP mutP (modifyP mutP (const (fDist conf (DNA.newSymbol dna)))) dna)
+                DNA.mutate mutP mutP mutP (modifyP mutP (const (fDist conf (DNA.newSymbol dna)))) dna)
                 (getPool pool)
     where
     mutP = 1 / fromIntegral odds
@@ -60,7 +60,7 @@ hookup dnas
         j <- intRange (Seq.length dnas)
         DNA.combine (Seq.index dnas i) (Seq.index dnas j)
 
-iterPool :: (Functor f, Distribution d) 
+iterPool :: (Monad f, Distribution d) 
          => SimConfig f -> IterConfig f -> Pool f -> d (Pool f)
 iterPool conf iterConf pool = do
     let rankedPool = rank (metric iterConf) (getPool pool)

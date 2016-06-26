@@ -3,6 +3,7 @@
 import qualified Control.Monad.Random as Rand
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
+import qualified Control.Monad.Free as Free
 import Control.Monad (join)
 import Control.Arrow
 import Data.Ord (comparing, Down(..))
@@ -13,17 +14,22 @@ import Distribution
 import qualified DNA
 import Pool
 
-data NumberF a
+data NumberGF a
     = Zero
     | One
     | Plus a a
     deriving (Eq, Ord, Functor, Show)
+
+type NumberF = Free.Free NumberGF
 
 simConfig :: SimConfig NumberF
 simConfig = SimConfig {
     codeSize = 26,
     fDist = numberFDist
 }
+
+unfreeAlg :: (Functor f) => DNA.Algebra f a -> DNA.Algebra (Free.Free f) a
+unfreeAlg alg = Free.iter alg
 
 iterConfig :: IterConfig NumberF
 iterConfig = IterConfig {
@@ -36,18 +42,17 @@ iterConfig = IterConfig {
 }
 
 integerDepthAlg :: DNA.Algebra NumberF (Int -> Integer)
-integerDepthAlg = DNA.depthAlg 10 0 (\case
+integerDepthAlg = unfreeAlg $ DNA.depthAlg 10 0 (\case
     Zero -> 0
     One -> 1
     Plus x y -> x + y)
 
 numberFDist :: (Distribution d) => DNA.FDist d NumberF
-numberFDist aDist = join (uniform [
+numberFDist aDist = Free.liftF <$> join (uniform [
         pure Zero,
         pure One,
         Plus <$> aDist <*> aDist
     ])
-
 
 
 

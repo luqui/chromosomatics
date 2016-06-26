@@ -7,60 +7,61 @@ import Control.Arrow
 import Data.Ord (comparing, Down(..))
 import Data.Monoid ((<>))
 
-import DNA
+import Distribution
+import qualified DNA
 
-newtype Pool s f = Pool { getPool :: Seq.Seq (DNA s f) }
+newtype Pool f = Pool { getPool :: Seq.Seq (DNA.DNA f) }
     deriving (Monoid)
 
-data SimConfig s f = SimConfig {
+data SimConfig f = SimConfig {
     codeSize :: Int,
-    symbolDist :: forall d. (Distribution d) => d s,
-    fDist :: forall d. (Distribution d) => FDist d f
+    fDist :: forall d. (Distribution d) => DNA.FDist d f
 }
 
-initialPool :: (Ord s, Distribution d) => SimConfig s f -> Int -> d (Pool s f)
+initialPool :: (Distribution d) => SimConfig f -> Int -> d (Pool f)
 initialPool conf size = 
-    Pool <$> Seq.replicateA size (newDNA (codeSize conf) (symbolDist conf) (fDist conf))
+    Pool <$> Seq.replicateA size (DNA.new (codeSize conf) (fDist conf))
 
-interbreedPool :: (Ord s, Distribution d) => Int -> Pool s f -> d (Pool s f)
+interbreedPool :: (Distribution d) => Int -> Pool f -> d (Pool f)
 interbreedPool poolSize pool = Pool <$> Seq.replicateA poolSize (hookup (getPool pool))
 
 
 data Metric a = forall b. Ord b => Metric (a -> b)
 
-data IterConfig s f = IterConfig {
+data IterConfig f = IterConfig {
     poolSize :: Int,
     oldGuardSize :: Int,
     childrenSize :: Int,
     cestpoolSize :: Int,
-    metric :: Metric (DNA s f),
+    metric :: Metric (DNA.DNA f),
     mutationOdds :: Int  -- 1 / mutationRate
 }
 
-rank :: (Ord s) => Metric (DNA s f) -> Seq.Seq (DNA s f) -> Seq.Seq (DNA s f)
+rank :: Metric (DNA.DNA f) -> Seq.Seq (DNA.DNA f) -> Seq.Seq (DNA.DNA f)
 rank (Metric metric) =
     fmap (metric &&& id) >>>
     Seq.unstableSortBy (comparing (Down . fst)) >>>
     fmap snd
 
 -- odds = 1 / mutationRate
-mutatePool :: (Distribution d, Functor f) => SimConfig s f -> Int -> Pool s f -> d (Pool s f)
-mutatePool conf odds pool = Pool <$> traverse mutateDNA (getPool pool)
+mutatePool :: (Distribution d, Functor f) => SimConfig f -> Int -> Pool f -> d (Pool f)
+mutatePool conf odds pool =
+    Pool <$> traverse (\dna -> 
+                DNA.mutate mutP mutP (modifyP mutP (const (fDist conf (DNA.newSymbol dna)))) dna)
+                (getPool pool)
     where
-    mutateDNA (DNA table s0) = DNA <$> traverse mutateFDist table <*> mutateSymbol s0
-    mutateFDist = hit (const (fDist conf (symbolDist conf)))
-    mutateSymbol = hit (const (symbolDist conf))
-            
-    hit :: (Distribution d) => (a -> d a) -> a -> d a
-    hit | odds == 0 = \f x -> return x
-        | otherwise = \f x -> do
-            h <- intRange odds
-            if h == 0
-                then f x
-                else return x
+    mutP = 1 / fromIntegral odds
 
-iterPool :: (Ord s, Functor f, Distribution d) 
-         => SimConfig s f -> IterConfig s f -> Pool s f -> d (Pool s f)
+hookup :: (Distribution d) => Seq.Seq (DNA.DNA f) -> d (DNA.DNA f)
+hookup dnas 
+    | Seq.null dnas = error "hookup: empty sequence"
+    | otherwise = do
+        i <- intRange (Seq.length dnas)
+        j <- intRange (Seq.length dnas)
+        DNA.combine (Seq.index dnas i) (Seq.index dnas j)
+
+iterPool :: (Functor f, Distribution d) 
+         => SimConfig f -> IterConfig f -> Pool f -> d (Pool f)
 iterPool conf iterConf pool = do
     let rankedPool = rank (metric iterConf) (getPool pool)
     let oldGuard = Pool (Seq.take (oldGuardSize iterConf) rankedPool)

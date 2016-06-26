@@ -1,73 +1,81 @@
-{-# LANGUAGE RankNTypes, LambdaCase, TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE RankNTypes, LambdaCase, TypeSynonymInstances, FlexibleInstances, ScopedTypeVariables #-}
 
-module DNA where
+module DNA (
+    FDist,
 
+    Algebra,
+    depthAlg,
+
+    Symbol, DNA,
+    birth, newSymbol, new, combine, mutate,
+    showDNALines
+) where
+
+import qualified Data.Vector as V
 import qualified Data.Map.Strict as Map
 import qualified Control.Monad.Random as Rand
 import qualified Data.Sequence as Seq
+import Control.Monad.Trans.Writer
+import Control.Monad ((<=<))
+import Data.Monoid
 
--- A `ZAlgebra` is an algebra with a 'zero' element (`alg Nothing`).
-type ZAlgebra f a = Maybe (f a) -> a
-
--- `DNA s f` is a symbol table over the algebra `f`, with a distinguished start symbol.
-type Table s f = Map.Map s (f s)
-data DNA s f = DNA !(Table s f) !s
-    deriving (Show)
+import Distribution
 
 
-fromTable :: (Functor f, Ord s) => ZAlgebra f a -> Table s f -> s -> a
-fromTable alg table s = alg ((fmap.fmap) (fromTable alg table) (Map.lookup s table))
+type Algebra f a = f a -> a
 
-birth :: (Functor f, Ord s) => ZAlgebra f a -> DNA s f -> a
+depthAlg :: (Functor f) => Int -> a -> Algebra f a -> Algebra f (Int -> a)
+depthAlg maxDepth zero alg f depth
+    | depth >= maxDepth = zero
+    | otherwise = alg (fmap ($ depth + 1) f)
+
+
+-- `DNA f` is a symbol table over the algebra `f`, with a distinguished start symbol.
+newtype Symbol = Symbol { getSymbol :: Int }
+
+instance Show Symbol where
+    show (Symbol n) = '@' : show n
+
+data DNA f = DNA !(V.Vector (f Symbol)) !Symbol
+
+birth :: (Functor f) => Algebra f a -> DNA f -> a
 birth alg (DNA table s0) = fromTable alg table s0
-
-depthAlg :: (Functor f) => Int -> ZAlgebra f a -> ZAlgebra f (Int -> a)
-depthAlg maxDepth alg f depth
-    | depth >= maxDepth = alg Nothing
-    | otherwise = alg ((fmap.fmap) ($ depth + 1) f)
-
-
-class (Monad d) => Distribution d where
-    uniform :: [a] -> d a
-    intRange :: Int -> d Int
-
-pick :: (Distribution d) => a -> a -> d a
-pick x y = uniform [x,y]
-
-instance (Rand.RandomGen g) => Distribution (Rand.Rand g) where
-    uniform = Rand.uniform
-    intRange n = Rand.getRandomR (0, n-1)
+    where
+    fromTable alg table s = alg (fmap (fromTable alg table) (table V.! getSymbol s))
 
 -- `Dist a` is a probability distribution of `a`s.
 type Dist = Rand.Rand Rand.StdGen
 type FDist d f = forall a. d a -> d (f a)
 
-replicateA :: (Applicative f) => Int -> f a -> f [a]
-replicateA z = sequenceA . replicate z
+-- Probability distribution for a symbol in the given DNA
+newSymbol :: (Distribution d) => DNA f -> d Symbol
+newSymbol (DNA table _) = Symbol <$> intRange (V.length table)
 
-newDNA :: (Ord s, Distribution d) => Int -> d s -> FDist d f -> d (DNA s f)
-newDNA size symDist fDist = 
-    DNA <$> (Map.fromList <$> replicateA size ((,) <$> symDist <*> fDist symDist)) <*> symDist
+new :: (Distribution d) => Int -> FDist d f -> d (DNA f)
+new size fDist = 
+    DNA <$> V.replicateM size (fDist symDist) <*> symDist
+    where
+    symDist = Symbol <$> intRange size
 
-forceMap m = foldr seq () (Map.elems m) `seq` m
+combine :: (Distribution d) => DNA f -> DNA f -> d (DNA f)
+combine (DNA table1 s1) (DNA table2 s2) = DNA <$> table' <*> pick s1 s2
+    where
+    table' = V.generateM (max (V.length table1) (V.length table2)) $ \i -> 
+                pickJust (table1 V.!? i) (table2 V.!? i)
 
--- The traversable implementation on Map.Strict is lazy because god knows why.
-sequenceAStrict :: (Ord k, Applicative f) => Map.Map k (f v) -> f (Map.Map k v)
-sequenceAStrict = fmap Map.fromAscList . sequenceA . fmap sequenceA . Map.toAscList
+    pickJust (Just x) (Just y) = pick x y
+    pickJust (Just x) Nothing = pure x
+    pickJust Nothing (Just y) = pure y
+    pickJust Nothing Nothing = error "pickJust: nothing to pick"
 
-combineDNA :: (Ord s, Distribution d) => DNA s f -> DNA s f -> d (DNA s f)
-combineDNA (DNA table1 s1) (DNA table2 s2) =
-    DNA <$> (Map.unions <$> sequenceA [
-                sequenceAStrict (Map.intersectionWith pick table1 table2),
-                pure table1,
-                pure table2])
-        <*> pick s1 s2
+mutate :: (Distribution d, Functor f)
+       => Double -> Double -> (f Symbol -> d (f Symbol)) -> DNA f -> d (DNA f)
+mutate startP symP mutateCode dna@(DNA table s0) = 
+    DNA <$> V.mapM mutateElem table
+        <*> modifyP startP (const (newSymbol dna)) s0
+    where
+    mutateElem e = mutateCode =<< modifyP symP (\x -> (<$ x) <$> newSymbol dna) e
 
-hookup :: (Ord s, Distribution d) => Seq.Seq (DNA s f) -> d (DNA s f)
-hookup dnas 
-    | Seq.null dnas = error "hookup: empty sequence"
-    | otherwise = do
-        i <- intRange (Seq.length dnas)
-        j <- intRange (Seq.length dnas)
-        combineDNA (Seq.index dnas i) (Seq.index dnas j)
-    
+showDNALines :: (Show (f Symbol)) => DNA f -> [String]
+showDNALines (DNA table s0) = 
+    ["START " ++ show s0] ++ [ show n ++ ":\t" ++ show c | (n,c) <- zip [0..] (V.toList table) ]

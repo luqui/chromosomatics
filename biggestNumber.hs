@@ -9,7 +9,8 @@ import Data.Ord (comparing, Down(..))
 import Data.List (maximumBy, sortBy)
 import Data.Foldable (toList)
 
-import DNA
+import Distribution
+import qualified DNA
 import Pool
 
 data NumberF a
@@ -18,32 +19,29 @@ data NumberF a
     | Plus a a
     deriving (Eq, Ord, Functor, Show)
 
-type Symbol = Char
-
-simConfig :: SimConfig Symbol NumberF
+simConfig :: SimConfig NumberF
 simConfig = SimConfig {
     codeSize = 26,
-    symbolDist = uniform ['A'..'Z'],
     fDist = numberFDist
 }
 
-iterConfig :: IterConfig Symbol NumberF
+iterConfig :: IterConfig NumberF
 iterConfig = IterConfig {
     poolSize = 1000,
     oldGuardSize = 50,
     childrenSize = 1500,
     cestpoolSize = 50,
-    metric = Metric (\dna -> birth integerDepthAlg dna 0),
+    metric = Metric (\dna -> DNA.birth integerDepthAlg dna 0),
     mutationOdds = 200
 }
 
-integerDepthAlg :: ZAlgebra NumberF (Int -> Integer)
-integerDepthAlg = depthAlg 10 (maybe 0 (\case
+integerDepthAlg :: DNA.Algebra NumberF (Int -> Integer)
+integerDepthAlg = DNA.depthAlg 10 0 (\case
     Zero -> 0
     One -> 1
-    Plus x y -> x + y))
+    Plus x y -> x + y)
 
-numberFDist :: (Distribution d) => FDist d NumberF
+numberFDist :: (Distribution d) => DNA.FDist d NumberF
 numberFDist aDist = join (uniform [
         pure Zero,
         pure One,
@@ -53,36 +51,18 @@ numberFDist aDist = join (uniform [
 
 
 
-showDNALines :: DNA Symbol NumberF -> [String]
-showDNALines (DNA table s0) = concat [
-        ["START: " ++ show s0],
-        map ("\t" ++) (showTableLines table)
-    ]
-
-showTableLines :: (Show a, Show b) => Map.Map a b -> [String]
-showTableLines m = [ show k ++ ": \t" ++ show v | (k,v) <- Map.assocs m ]
-
-report :: Pool Symbol NumberF -> IO ()
+report :: Pool NumberF -> IO ()
 report pool = do
-    let inst = fmap (flip (birth integerDepthAlg) 0 &&& id) (getPool pool)
+    let inst = fmap (flip (DNA.birth integerDepthAlg) 0 &&& id) (getPool pool)
     putStrLn "------------"
     putStrLn $ "pool size: " ++ show (Seq.length inst)
     putStrLn $ "average: " ++ 
         show (fromIntegral (sum (fmap fst inst)) / fromIntegral (Seq.length inst))
     let best = maximumBy (comparing fst) inst
     putStrLn $ "best: " ++ show (fst best)
-    putStrLn . unlines $ showTableLines (histogram pool)
-    --putStrLn . unlines $ showDNALines (snd best)
+    putStrLn . unlines $ DNA.showDNALines (snd best)
 
-histogram :: (Ord s, Ord (f s)) => Pool s f -> Map.Map s [Int]
-histogram (Pool dnas) = ($ map getTable (toList dnas)) $ 
-    (fmap.fmap) (\v -> Map.singleton v 1) >>>
-    Map.unionsWith (Map.unionWith (+)) >>>
-    fmap (sortBy (comparing Down) . Map.elems)
-    where
-    getTable (DNA table _) = table
-
-mainIter :: Pool Symbol NumberF -> IO a
+mainIter :: Pool NumberF -> IO a
 mainIter pool = do
     report pool
     mainIter =<< Rand.evalRandIO (iterPool simConfig iterConfig pool)
